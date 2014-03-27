@@ -111,6 +111,37 @@ def matches(what, where):
     return False
 
 
+class IncludeLoader(yaml.Loader):
+    """
+    yaml.Loader subclass handles "!include path/to/foo.yml" directives in config
+    files.  When constructed with a file object, the root path for includes
+    defaults to the directory containing the file, otherwise to the current
+    working directory. In either case, the root path can be overridden by the
+    `root` keyword argument.
+
+    When an included file F contain its own !include directive, the path is
+    relative to F's location.
+    Code from:
+    http://stackoverflow.com/questions/528281/how-can-i-include-an-yaml-file-inside-another
+    """
+    def __init__(self, *args, **kwargs):
+        super(IncludeLoader, self).__init__(*args, **kwargs)
+        self.add_constructor('!include', self._include)
+        if 'root' in kwargs:
+            self.root = kwargs['root']
+        elif isinstance(self.stream, file):
+            self.root = os.path.dirname(self.stream.name)
+        else:
+            self.root = os.path.curdir
+
+    def _include(self, loader, node):
+        oldRoot = self.root
+        fn = os.path.join(self.root, loader.construct_scalar(node))
+        self.root = os.path.dirname(fn)
+        data = yaml.load(open(fn, 'r'))
+        self.root = oldRoot
+        return data
+
 class YamlParser(object):
     def __init__(self, config=None):
         self.registry = ModuleRegistry(config)
@@ -118,7 +149,7 @@ class YamlParser(object):
         self.jobs = []
 
     def parse(self, fn):
-        data = yaml.load(open(fn))
+        data = IncludeLoader(open(fn)).get_data()
         if data:
             if not isinstance(data, list):
                 raise JenkinsJobsException(
