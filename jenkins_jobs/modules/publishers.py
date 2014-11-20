@@ -183,13 +183,83 @@ def trigger_parameterized_builds(parser, xml_parent, data):
       (optional)
     :arg str node-label: Specify the Node for the NodeLabel parameter.
       (optional)
+    :arg str order: coma separated list of parameters
 
     Example:
 
     .. literalinclude::
-      /../../tests/publishers/fixtures/trigger_parameterized_builds001.yaml
+      /../../tests/publishers/fixtures/trigger_parameterized_builds003.yaml
 
     """
+    allowed_keys = [
+        'predefined-parameters',
+        'git-revision',
+        'property-file',
+        'current-parameters',
+        'svn-revision',
+        'restrict-matrix-project',
+        'node-label-name',
+        'node-label',
+    ]
+    def _has_allowed(keys):
+        for k in keys:
+            if k in allowed_keys:
+                return True
+        return False
+    def _add(key, tconfigs, project_def):
+        if key == 'predefined-parameters':
+            params = XML.SubElement(tconfigs,
+                                            'hudson.plugins.parameterizedtrigger.'
+                                            'PredefinedBuildParameters')
+            properties = XML.SubElement(params, 'properties')
+            properties.text = project_def['predefined-parameters']
+        elif key == 'git-revision':
+            params = XML.SubElement(tconfigs,
+                                        'hudson.plugins.git.'
+                                        'GitRevisionBuildParameters')
+            properties = XML.SubElement(params, 'combineQueuedCommits')
+            properties.text = 'false'
+        elif key == 'property-file':
+            params = XML.SubElement(tconfigs,
+                                        'hudson.plugins.parameterizedtrigger.'
+                                        'FileBuildParameters')
+            properties = XML.SubElement(params, 'propertiesFile')
+            properties.text = project_def['property-file']
+            failOnMissing = XML.SubElement(params, 'failTriggerOnMissing')
+            failOnMissing.text = str(project_def.get('fail-on-missing',
+                                                     False)).lower()
+        elif key == 'current-parameters':
+            XML.SubElement(tconfigs,
+                               'hudson.plugins.parameterizedtrigger.'
+                               'CurrentBuildParameters')
+        elif key == 'svn-revision':
+            XML.SubElement(tconfigs,
+                               'hudson.plugins.parameterizedtrigger.'
+                               'SubversionRevisionBuildParameters')
+        elif key == 'restrict-matrix-project':
+            subset = XML.SubElement(tconfigs,
+                                        'hudson.plugins.parameterizedtrigger.'
+                                        'matrix.MatrixSubsetBuildParameters')
+            XML.SubElement(subset, 'filter').text = \
+                project_def['restrict-matrix-project']
+        elif key in ['node-label', 'node-label-name']:
+            params = XML.SubElement(tconfigs,
+                                        'org.jvnet.jenkins.plugins.'
+                                        'nodelabelparameter.'
+                                        'parameterizedtrigger.'
+                                        'NodeLabelBuildParameter')
+            name = XML.SubElement(params, 'name')
+            if 'node-label-name' in project_def:
+                name.text = project_def['node-label-name']
+            label = XML.SubElement(params, 'nodeLabel')
+            if 'node-label' in project_def:
+                label.text = project_def['node-label']
+        else:
+            raise JenkinsJobsException(
+                'trigger_parameterized_builds must be one of: '
+                + ', '.join(allowed_keys) + ' key: ' + key)
+
+
     tbuilder = XML.SubElement(xml_parent,
                               'hudson.plugins.parameterizedtrigger.'
                               'BuildTrigger')
@@ -199,68 +269,40 @@ def trigger_parameterized_builds(parser, xml_parent, data):
                                  'hudson.plugins.parameterizedtrigger.'
                                  'BuildTriggerConfig')
         tconfigs = XML.SubElement(tconfig, 'configs')
-        if ('predefined-parameters' in project_def
-            or 'git-revision' in project_def
-            or 'property-file' in project_def
-            or 'current-parameters' in project_def
-            or 'svn-revision' in project_def
-            or 'restrict-matrix-project' in project_def
-            or 'node-label-name' in project_def
-            or 'node-label' in project_def):
-
-            if 'predefined-parameters' in project_def:
-                params = XML.SubElement(tconfigs,
-                                        'hudson.plugins.parameterizedtrigger.'
-                                        'PredefinedBuildParameters')
-                properties = XML.SubElement(params, 'properties')
-                properties.text = project_def['predefined-parameters']
-
-            if 'git-revision' in project_def and project_def['git-revision']:
-                params = XML.SubElement(tconfigs,
-                                        'hudson.plugins.git.'
-                                        'GitRevisionBuildParameters')
-                properties = XML.SubElement(params, 'combineQueuedCommits')
-                properties.text = 'false'
-            if 'property-file' in project_def and project_def['property-file']:
-                params = XML.SubElement(tconfigs,
-                                        'hudson.plugins.parameterizedtrigger.'
-                                        'FileBuildParameters')
-                properties = XML.SubElement(params, 'propertiesFile')
-                properties.text = project_def['property-file']
-                failOnMissing = XML.SubElement(params, 'failTriggerOnMissing')
-                failOnMissing.text = str(project_def.get('fail-on-missing',
-                                                         False)).lower()
-            if ('current-parameters' in project_def
-                and project_def['current-parameters']):
-                XML.SubElement(tconfigs,
-                               'hudson.plugins.parameterizedtrigger.'
-                               'CurrentBuildParameters')
-            if 'svn-revision' in project_def and project_def['svn-revision']:
-                XML.SubElement(tconfigs,
-                               'hudson.plugins.parameterizedtrigger.'
-                               'SubversionRevisionBuildParameters')
-            if ('restrict-matrix-project' in project_def
-                and project_def['restrict-matrix-project']):
-                subset = XML.SubElement(tconfigs,
-                                        'hudson.plugins.parameterizedtrigger.'
-                                        'matrix.MatrixSubsetBuildParameters')
-                XML.SubElement(subset, 'filter').text = \
-                    project_def['restrict-matrix-project']
-            if 'node-label-name' in project_def or \
-               'node-label' in project_def:
-                params = XML.SubElement(tconfigs,
-                                        'org.jvnet.jenkins.plugins.'
-                                        'nodelabelparameter.'
-                                        'parameterizedtrigger.'
-                                        'NodeLabelBuildParameter')
-                name = XML.SubElement(params, 'name')
-                if 'node-label-name' in project_def:
-                    name.text = project_def['node-label-name']
-                label = XML.SubElement(params, 'nodeLabel')
-                if 'node-label' in project_def:
-                    label.text = project_def['node-label']
+        order = project_def.pop('order', [])
+        if (_has_allowed(project_def.iterkeys())):
+            if 'predefined-parameters' in project_def \
+                and 'predefined-parameters' not in order:
+                _add('predefined-parameters', tconfigs, project_def)
+            if 'git-revision' in project_def and project_def['git-revision'] \
+                and 'git-revision' not in order:
+                _add('git-revision', tconfigs, project_def)
+            if 'property-file' in project_def and project_def['property-file'] \
+                and 'property-file' not in order:
+                _add('property-file', tconfigs, project_def)
+            if 'current-parameters' in project_def \
+                and project_def['current-parameters'] \
+                and 'current-parameters' not in order:
+                _add('current-parameters', tconfigs, project_def)
+            if 'svn-revision' in project_def and project_def['svn-revision'] \
+                and 'svn-revision' not in order:
+                 _add('svn-revision', tconfigs, project_def)
+            if 'restrict-matrix-project' in project_def \
+                and project_def['restrict-matrix-project'] \
+                and 'restrict-matrix-project' not in order:
+                _add('restrict-matrix-project', tconfigs, project_def)
+            if ('node-label-name' in project_def or
+               'node-label' in project_def) and \
+                ('node-label-name' not in order and 'node-label' not in order):
+                _add('node-label', tconfigs, project_def)
         else:
             tconfigs.set('class', 'java.util.Collections$EmptyList')
+        if order:
+            order_list = order.split(',');
+            if 'node-label' in order_list and 'node-label-name' in order_list:
+                order_list.remove('node-label-name')
+            for p in order_list:
+                _add(p.strip(), tconfigs, project_def)
         projects = XML.SubElement(tconfig, 'projects')
         projects.text = project_def['project']
         condition = XML.SubElement(tconfig, 'condition')
